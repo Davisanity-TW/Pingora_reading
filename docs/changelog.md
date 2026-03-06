@@ -13,3 +13,4 @@
 
 - 2026-03-06
   - 補強 pingora-s3-mongo `app.rs`：request routing + bucket/key 解析（virtual-host/path-style）+ store API 對應整理（新增 `docs/s3-mongo/app_request_routing.md`）
+  - 補齊 pingora-s3-mongo request flow（以 handler 為單位）：ListBuckets/CreateBucket/HeadBucket/DeleteBucket/PutObject/GetObject/HeadObject/DeleteObject/ListObjects/Tagging/Multi-Delete 的 store 呼叫、錯誤分支與回應型態
