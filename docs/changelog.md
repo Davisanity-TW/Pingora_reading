@@ -10,3 +10,6 @@
 
 - 2026-03-05
   - 新增 pingora-s3-mongo `app.rs`：access log（`AccessLogCtx`）欄位來源、`act_grp` 分類規則與 log format 筆記
+
+- 2026-03-06
+  - 補強 pingora-s3-mongo `app.rs`：request routing + bucket/key 解析（virtual-host/path-style）+ store API 對應整理（新增 `docs/s3-mongo/app_request_routing.md`）
