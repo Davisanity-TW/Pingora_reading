@@ -282,3 +282,19 @@ bucket 與 key 都會透過：
 - `read_full_body()` 對大物件/長連線的風險：是否有 size cap、timeout、背壓（目前看起來是一次讀滿）。
 - ListObjects 的 bucket existence check 條件：目前只有在「回來空頁」才檢查 bucket 存不存在；若 bucket 存在但 prefix 下沒有物件 vs bucket 不存在，兩者都可能回 empty page，但 code 用 `bucket_exists()` 區分（要看 store.list_objects 的回傳特性）。
 - path decode 對 `%2F` 的影響：S3 key 本質上允許任意字元（包含 `/`），但 HTTP path 的 split 會先決定 bucket/key 邊界；目前設計偏向「先 split 再 decode」。
+
+### (A-1) Virtual-host style 的幾個實作細節／陷阱
+
+補幾個從程式碼直接讀到的細節（對 debug 很有用）：
+
+- **只取第一個 label 當 bucket**：`host_without_port.split_once('.')` 只切一次，所以 `a.b.example.com` 會把 bucket 當成 `a`（不是 `a.b`）。
+- **`localhost` 直接排除**：`bucket != "localhost"`，因此本機測試若用 `localhost:9000` 不會走 virtual-host style。
+- **IPv4 literal 也排除**：例如 `127.0.0.1`（或任何 `x.x.x.x` 且每段可 parse u8）會被 `is_ipv4_host()` 視為 IP → 不採 virtual-host style。
+- **key 的空字串會變 None**：
+  - virtual-host style：`GET /`（path 只有 `/`）→ `trimmed.is_empty()` → `key=None`
+  - path style：`/bucket/` → split 後 `key_raw=""`，decode 後仍空 → `.filter(|v| !v.is_empty())` → `key=None`
+- **decode 的時機**：
+  - virtual-host style：只 decode path（`trimmed`），host label（bucket）不 decode。
+  - path style：先 split bucket/key，再分別 decode；因此 `%2F` 若出現在 key 內會 decode 成 `/`，但 **不會影響 split bucket/key 的邊界**（因為 split 在 decode 前就做了）。
+
+（對照原始碼：`pingora-s3-mongo/src/app.rs::parse_bucket_and_key()`）
