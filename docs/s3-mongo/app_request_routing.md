@@ -6,6 +6,42 @@
 
 ---
 
+## 0) 最外層入口：Pingora listener → `ServeHttp::response()` → `dispatch()`
+
+在 pingora-s3-mongo 這個 binary 裡，HTTP request 進來後會由 Pingora 的 HTTP server 驅動，最後呼叫到 `S3MongoApp` 對 `pingora::apps::http_app::ServeHttp` 的實作：
+
+- 入口函式：`impl ServeHttp for S3MongoApp { async fn response(&self, http_stream: &mut ServerSession) -> Response<Vec<u8>> }`
+- 這裡做了兩件事：
+  1) 建立 request context（for access log）：`AccessLogCtx::from_request(http_stream)`
+  2) 呼叫真正的路由/處理邏輯：`self.dispatch(http_stream).await`
+
+### request context（AccessLogCtx）是怎麼建立的？
+
+`AccessLogCtx::from_request()` 會從 `ServerSession`/`RequestHeader` 抽出：
+
+- client 來源 IP：`http_stream.client_addr()`（Inet/Unix）
+- method + path/query：`req_header.method` + `req_header.uri.path_and_query()`
+- user-agent：只取空白前第一段（`split(' ').next()`）
+- request size：取 `content-length` header（沒有就 0）
+- user（access key）：`extract_credential()` → `short_credential()`（取縮短版，避免 log 太長）
+- bucket：再次呼叫 `parse_bucket_and_key(path, host)` 取 bucket（取不到就 `-`）
+- act_grp：用 `classify_act_grp(method, query, bucket.is_none())` 粗分 GET/PUT/DELETE 等類別（給 access log 用）
+
+### `dispatch()` 失敗時的最外層錯誤路徑
+
+`dispatch()` 回傳型別是 `Result<Response<Vec<u8>>, String>`。
+
+- `Ok(resp)`：原樣回應給 client
+- `Err(err_string)`：
+  - log：`error!("s3-mongo request failed: {err}")`
+  - 回應：`500 InternalServerError` + S3 XML error：
+    - Code：`InternalError`
+    - Message：`We encountered an internal error. Please try again.`
+
+> 也就是說：只要 handler/store 任何地方回 `Err(String)` 冒出來，最後都會被統一包成 `InternalError(500)`；而「有意識的 S3 錯誤碼」通常都是 handler 直接 `Ok(s3_error(...))` 回來的。
+
+---
+
 ## 1) 入口：`S3MongoApp::dispatch()`
 
 核心流程（簡化）：
@@ -291,6 +327,77 @@ bucket 與 key 都會透過：
 - parse：`parse_delete_objects_xml()`（失敗 → `400 MalformedXML`）
 - store：`delete_objects(bucket, keys)`
 - response：`200 OK` + XML（`render_delete_objects_result()`）
+
+---
+
+## 5.x) 主要 error path / HTTP status mapping（從 app.rs 直接整理）
+
+> 目的：用「看到某個 status 或 S3 Code」就能快速回推是哪個分支打出來的。
+
+### A) `dispatch()` 前段就會擋掉的錯
+
+- bucket 名稱不合法（`is_valid_bucket_name()`）
+  - `400 BadRequest`
+  - Code：`InvalidBucketName`
+  - Message：`The specified bucket is not valid.`
+
+### B) auth 錯誤（`authenticate_request()` → `S3MongoApp::authenticate()`）
+
+全部都是 `403 Forbidden`，差別在 S3 Code：
+
+- `MissingAuthorization` → `AccessDenied`（`Access Denied.`）
+- `InvalidAccessKeyId` → `InvalidAccessKeyId`
+- `AccessDenied` → `AccessDenied`
+- `SignatureDoesNotMatch` → `SignatureDoesNotMatch`
+
+> 注意：在 `dispatch()` 一開始就會先把 bucket（若有）傳進 auth；因此「bucket 白名單」這種 bucket-level ACL 很可能在 auth 層就已經做掉（要看 `auth.rs`）。
+
+### C) bucket/key 缺失造成的 `InvalidURI` / `InvalidRequest`
+
+- bucket 必須存在（但 client 沒帶 bucket）：
+  - `HEAD/PUT/DELETE` 若 `bucket=None`：`400 InvalidURI`（`Bucket must be provided.`）
+- tagging 需要 key：
+  - `GET ?tagging` 但 `key=None`：`400 InvalidRequest`（`Object tagging requires a key.`）
+  - `PUT/DELETE ?tagging` 但 `key=None`：同上
+
+### D) 常見的 NoSuchBucket / NoSuchKey
+
+- `GET Object`：
+  - 找不到物件時會再查 bucket 是否存在，回：
+    - `404 NoSuchBucket` 或 `404 NoSuchKey`
+- `GET Tagging`：同上（用 `bucket_exists()` 區分）
+- `PUT Tagging` / `DELETE Tagging`：
+  - store 回 updated=false 時，用 `bucket_exists()` 區分回 `NoSuchBucket` / `NoSuchKey`
+- `POST ?delete`（Multi-Delete）：
+  - 一開始就先 `bucket_exists()`，不存在直接 `404 NoSuchBucket`
+
+### E) 409 類（Conflict）
+
+- CreateBucket：
+  - bucket 已存在 → `409 BucketAlreadyOwnedByYou`
+- DeleteBucket：
+  - bucket 裡還有 object（`bucket_object_count>0`）→ `409 BucketNotEmpty`
+
+### F) `HEAD` 系列的 404 特例（不是 S3 XML error）
+
+- `HEAD /{bucket}`：bucket 不存在 → `404` empty body（`head_bucket()` 直接 `empty_response(404)`）
+- `HEAD /{bucket}/{key}`：metadata 不存在 → `404` empty body（`head_object()` 直接 `empty_response(404)`）
+
+> 這點跟其他 API「盡量回 S3 XML error」不一致，實務上 debug 時要特別小心。
+
+### G) 400 MalformedXML
+
+- `PUT ?tagging`：tagging XML parse 失敗 → `400 MalformedXML`
+- `POST ?delete`：multi-delete XML parse 失敗 → `400 MalformedXML`
+
+### H) 405 MethodNotAllowed
+
+- `POST` 但 query 沒 `delete`（以及其他不支援 method）→ `405` empty body
+
+### I) 500 InternalError（最外層兜底）
+
+- 只要 `dispatch()` 回 `Err(String)`，最外層 `ServeHttp::response()` 會統一回：
+  - `500 InternalError`（S3 XML error）
 
 ---
 

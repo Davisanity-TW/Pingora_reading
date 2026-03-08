@@ -20,3 +20,5 @@
 
 - 2026-03-08
   - 補強 pingora-s3-mongo `app.rs`：bucket 名稱合法性檢查 `is_valid_bucket_name()` 規則與被擋下時的回應（`InvalidBucketName`）
+  - 補齊 pingora-s3-mongo `app.rs` request flow：最外層入口 `ServeHttp::response()`（request context `AccessLogCtx` 建立）→ `dispatch()`，以及 dispatch 失敗時統一包 `InternalError(500)` 的兜底路徑
+  - 彙整 pingora-s3-mongo `app.rs` 主要錯誤分支與 HTTP status/S3 Code mapping（InvalidURI/InvalidRequest/MalformedXML/NoSuchBucket/NoSuchKey/409/405/500；以及 HEAD 404 empty body 特例）
