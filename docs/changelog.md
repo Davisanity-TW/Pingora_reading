@@ -17,3 +17,6 @@
 
 - 2026-03-07
   - 補強 pingora-s3-mongo `parse_bucket_and_key()`：virtual-host style 的實作細節/邊界案例（localhost、IPv4、只取第一段 label、key 空字串→None、decode 時機）
+
+- 2026-03-08
+  - 補強 pingora-s3-mongo `app.rs`：bucket 名稱合法性檢查 `is_valid_bucket_name()` 規則與被擋下時的回應（`InvalidBucketName`）

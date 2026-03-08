@@ -90,6 +90,24 @@ bucket 與 key 都會透過：
 
 > 這代表路徑中 `%2F` 之類的編碼會被解出來；但注意這種 decode 可能會讓「原本以 `/` 分段的語意」變得微妙（例如 `%2F` 變成 `/`）。目前程式邏輯是：先 split bucket/key，再對 bucket_raw 與 key raw 各自 decode。
 
+### (D) bucket 名稱檢查：`is_valid_bucket_name()`
+
+`dispatch()` 在成功解析到 `bucket=Some(name)` 後，會先做 bucket 名稱合法性檢查，不合法直接回：
+
+- `400 BadRequest` / `InvalidBucketName`
+
+實作規則（偏 S3 bucket naming 風格，但有一些自訂限制）：
+
+- 長度：`3..=63`
+- **只允許小寫**字母、數字、`-`、`.`
+- 首尾必須是英數（不能以 `-` 或 `.` 開頭/結尾）
+- 不允許 `..`
+- 額外保留／禁止：
+  - bucket 不能以 `system.` 開頭
+  - bucket 不能包含 `$`
+
+> 這個檢查對 debug 很重要：如果你在本機測 `Bucket-A`（含大寫）或 `aa`（太短），你會在 dispatch 的很早期就被擋下來，甚至不會進到 auth / store。
+
 ---
 
 ## 3) 解析結果如何影響後續行為
