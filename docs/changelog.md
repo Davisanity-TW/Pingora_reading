@@ -25,3 +25,4 @@
 
 - 2026-03-09
   - 補強 pingora-s3-mongo `app.rs`：把 `parse_bucket_and_key()` / `query_has_key()` 的內建單元測試整理成「可執行規格」筆記，方便修改 routing 時快速對照（新增於 `docs/s3-mongo/app_request_routing.md`）
+  - 補強 pingora-s3-mongo `ServeHttp::response()` 的 end-to-end request 時序：`AccessLogCtx` 建立 → `dispatch()` → 統一寫 access log → 回應 client（新增於 `docs/s3-mongo/app_request_routing.md`）

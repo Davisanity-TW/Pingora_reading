@@ -15,6 +15,20 @@
   1) 建立 request context（for access log）：`AccessLogCtx::from_request(http_stream)`
   2) 呼叫真正的路由/處理邏輯：`self.dispatch(http_stream).await`
 
+### 入口到 access log：一個 request 的 end-to-end 時序（精簡版）
+
+用 `ServeHttp::response()` 看整體：
+
+1. **建立 log context（不會 fail request）**：`AccessLogCtx::from_request(http_stream)`
+2. **開始計時**：`let req_start = Instant::now()`
+3. **進入主要處理**：`self.dispatch(http_stream).await`
+   - 多數「預期的 S3 錯誤」是 handler 直接 `Ok(s3_error(...))` 回來（例如 NoSuchBucket/InvalidBucketName）。
+   - 只有「非預期錯誤」才用 `Err(String)` 往上冒，最後被包成 `InternalError(500)`。
+4. **統一寫 access log**：計算 `status/response_size/latency` → `log_access(&req_ctx, rp_status, rp_sz, response_time)`
+5. **回應 client**：把 `Response<Vec<u8>>` 交回 Pingora。
+
+> 這也意味著：就算某個 request 最後被拒絕（403）或打成 S3 error（4xx/5xx），**只要成功產生 Response**，都會有一筆 `info!` access log；只有程式 panic 或更底層連線問題才可能沒有。
+
 ### request context（AccessLogCtx）是怎麼建立的？
 
 `AccessLogCtx::from_request()` 會從 `ServerSession`/`RequestHeader` 抽出：
