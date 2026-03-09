@@ -423,3 +423,40 @@ bucket 與 key 都會透過：
   - path style：先 split bucket/key，再分別 decode；因此 `%2F` 若出現在 key 內會 decode 成 `/`，但 **不會影響 split bucket/key 的邊界**（因為 split 在 decode 前就做了）。
 
 （對照原始碼：`pingora-s3-mongo/src/app.rs::parse_bucket_and_key()`）
+
+---
+
+## 7) 內建單元測試：把 routing/bucket-key 解析當成「可執行規格」
+
+`app.rs` 末尾有一組 `#[cfg(test)]` 測試，等於把幾個核心判斷寫成「輸入 → 輸出」的規格；在你修改 routing 或 bucket/key 解析時，這些是最先會爆的保護網。
+
+### 7.1 `parse_bucket_and_key()` 測試案例（節錄）
+
+- **Path style**
+  - `path="/demo-bucket/path/to/file.txt", host="localhost:8080"`
+    - bucket → `demo-bucket`
+    - key → `path/to/file.txt`
+
+- **Bucket root（沒有 key）**
+  - `path="/demo-bucket"` → bucket 有值、key = `None`
+
+- **空路徑**
+  - `path="/"` → bucket/key 都是 `None`（對應 `GET /` 的 list-buckets 路徑）
+
+- **Virtual-host style**
+  - `path="/logs/2026-01-01.txt", host="my-bucket.s3.local:8080"`
+    - bucket → `my-bucket`
+    - key → `logs/2026-01-01.txt`
+
+- **IPv4 host 強制走 path style**
+  - `host="127.0.0.1:8080"` 會被視為 IP → 不啟用 virtual-host style
+
+### 7.2 `query_has_key()`：只看「key 存不存在」
+
+測試也明確表達：
+
+- `query_has_key("tagging&x=1", "tagging") == true`
+- `query_has_key("list-type=2&prefix=abc", "prefix") == true`
+- `query_has_key("x=1", "tagging") == false`
+
+> 這代表 routing 只在乎 `?tagging` / `?delete` / `?prefix` 等 key 是否出現，不在乎 value 是什麼；對 debug 很實用（例如 client 傳 `tagging=` 仍會被視為 tagging 路徑）。
