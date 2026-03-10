@@ -77,6 +77,22 @@
 
 `dispatch()` 的 match 邏輯（抓大方向）：
 
+#### 分流優先序的小提醒（對 debug/相容性很重要）
+
+- **bucket/key 解析與 bucket 名稱合法性檢查在 auth 之前**：
+  - `parse_bucket_and_key()` → `is_valid_bucket_name()` 先跑
+  - bucket 不合法會直接回 `400 InvalidBucketName`，甚至不會進 `authenticate_request()`
+  - 代表你用沒帶憑證的 request 也能觀察到「bucket 名稱格式」是否會被 accept（這是行為特徵，不一定是你想要的安全性）。
+
+- **`PUT`/`DELETE` 的 `?tagging` 會先被吃掉**：
+  - `PUT`：先判斷 `?tagging` → `handle_put_tagging()`，否則才看 `key` 是不是 None（create bucket）
+  - `DELETE`：同理先判斷 `?tagging` → `handle_delete_tagging()`
+  - 所以 `PUT /bucket?tagging` 會走 tagging 邏輯並回 `InvalidRequest`（缺 key），不會走 create bucket。
+
+- **`POST` 目前只支援 `?delete`（multi-delete）**：
+  - 其他 `POST` 一律 `405 MethodNotAllowed`（empty body）
+
+
 - `GET`
   - `bucket=None` → `list_buckets()`（列出 buckets）
   - `?tagging` → `get_object_tagging(bucket, key)`（需要 key）
