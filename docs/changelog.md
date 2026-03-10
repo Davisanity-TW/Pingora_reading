@@ -29,3 +29,4 @@
 
 - 2026-03-10
   - 補強 pingora-s3-mongo `app.rs` request routing 筆記：補上「bucket/key 解析與 bucket 名稱檢查在 auth 之前」以及 `?tagging`/`POST ?delete` 的分流優先序提醒（更新 `docs/s3-mongo/app_request_routing.md`）
+  - 補上 `dispatch()` 冒出 `Err(String)` 時常見來源（`read_full_body()` / `MongoS3Store::*` 的 `?` 傳播），方便對照為何被統一包成 `InternalError(500)`（更新 `docs/s3-mongo/app_request_routing.md`）

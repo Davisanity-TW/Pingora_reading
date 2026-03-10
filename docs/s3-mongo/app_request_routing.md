@@ -54,6 +54,13 @@
 
 > 也就是說：只要 handler/store 任何地方回 `Err(String)` 冒出來，最後都會被統一包成 `InternalError(500)`；而「有意識的 S3 錯誤碼」通常都是 handler 直接 `Ok(s3_error(...))` 回來的。
 
+補充：在 `app.rs` 這個層級，多數「會變成 `Err(String)`」的來源是：
+
+- `read_full_body(http_stream).await?`（讀 body 失敗/超時等）
+- `self.store.*(...).await?`（MongoS3Store 任一操作回 Err）
+
+相對地，XML parse（tagging / multi-delete）是用 `match` 包住，parse 失敗會走 `Ok(s3_error(400 MalformedXML ...))`，不會冒 `Err(String)`。
+
 ---
 
 ## 1) 入口：`S3MongoApp::dispatch()`
