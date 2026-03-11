@@ -8,7 +8,34 @@
 
 ## 0) 最外層入口：Pingora listener → `ServeHttp::response()` → `dispatch()`
 
-在 pingora-s3-mongo 這個 binary 裡，HTTP request 進來後會由 Pingora 的 HTTP server 驅動，最後呼叫到 `S3MongoApp` 對 `pingora::apps::http_app::ServeHttp` 的實作：
+在 pingora-s3-mongo 這個 binary 裡，HTTP request 進來後會由 Pingora 的 HTTP server 驅動，最後呼叫到 `S3MongoApp` 對 `pingora::apps::http_app::ServeHttp` 的實作。
+
+### 0.1 listener / route 入口：`src/main.rs` 如何把連線導到 app
+
+整體 wiring 在 `pingora-s3-mongo/src/main.rs`：
+
+- 建立 app：`let app = app::S3MongoApp::new(store.clone(), credential_cache.clone());`
+- 交給 Pingora 的 HTTP app wrapper：`let http_server = HttpServer::new_app(app);`
+- 掛到 listening service：`let mut service = Service::new("pingora-s3-mongo".to_string(), http_server);`
+- 綁定監聽位址（HTTP）：
+  - `LISTEN_ADDR` env 有值就用它
+  - 否則用 config 的 `config.http.port` 組 `0.0.0.0:{port}`
+  - 最後：`service.add_tcp(&listen_addr)`
+- 若設定了 https（`config.https` 存在）：
+  - `TLS_LISTEN_ADDR` env 有值就用它，否則用 `https.port`
+  - `service.add_tls(&tls_listen_addr, &https.tls_cert, &https.tls_key)`
+- 服務加入 server：`server.add_service(service);`
+
+補充：`main.rs` 也會加一個 background service 定期 refresh credentials：
+
+- service name：`s3-credential-refresh`
+- worker：`auth::CredentialCacheRefresher::new(store, credential_cache, config.auth.refresh_seconds)`
+
+這代表 request path 上的 `authenticate_request()` 除了即時驗證簽章，也依賴背景 refresh 的 in-memory cache（避免每次打 Mongo）。
+
+---
+
+入口函式與最外層處理在 `app.rs`：
 
 - 入口函式：`impl ServeHttp for S3MongoApp { async fn response(&self, http_stream: &mut ServerSession) -> Response<Vec<u8>> }`
 - 這裡做了兩件事：

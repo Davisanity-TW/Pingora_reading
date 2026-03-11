@@ -32,4 +32,4 @@
   - 補上 `dispatch()` 冒出 `Err(String)` 時常見來源（`read_full_body()` / `MongoS3Store::*` 的 `?` 傳播），方便對照為何被統一包成 `InternalError(500)`（更新 `docs/s3-mongo/app_request_routing.md`）
 
 - 2026-03-11
-  - 補強 pingora-s3-mongo `parse_bucket_and_key()` 筆記：追加 app.rs 內建單元測試案例（path-style / virtual-host-style precedence、IPv4 host 時禁用 virtual-host style）與實務含意（更新 `docs/s3-mongo/app_request_routing.md`）
+  - 補強 pingora-s3-mongo request flow：補上 `main.rs` 的 listener/service wiring（`HttpServer::new_app` → `Service::add_tcp/add_tls`）與 credential refresh background service，讓「listener/route 入口 → request context 建立」更完整（更新 `docs/s3-mongo/app_request_routing.md`）
