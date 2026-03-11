@@ -163,6 +163,25 @@ bucket 與 key 都會透過：
 
 > 這代表路徑中 `%2F` 之類的編碼會被解出來；但注意這種 decode 可能會讓「原本以 `/` 分段的語意」變得微妙（例如 `%2F` 變成 `/`）。目前程式邏輯是：先 split bucket/key，再對 bucket_raw 與 key raw 各自 decode。
 
+### (E) 範例（對照 app.rs 內建測試）
+
+`app.rs` 檔尾有對 `parse_bucket_and_key()` 的 unit tests，可用來快速理解 precedence：
+
+- Path style（一般）
+  - `("/demo-bucket/path/to/file.txt", "localhost:8080")` → bucket=`demo-bucket`, key=`path/to/file.txt`
+  - `("/demo-bucket", "localhost:8080")` → bucket=`demo-bucket`, key=None
+  - `("/", "localhost:8080")` → bucket=None, key=None
+
+- Virtual-host style（優先於 path style）
+  - `("/logs/2026-01-01.txt", "my-bucket.s3.local:8080")` → bucket=`my-bucket`, key=`logs/2026-01-01.txt`
+
+- host 為 IPv4 literal 時會**禁用** virtual-host style
+  - `("/demo-bucket/path/to/file.txt", "127.0.0.1:8080")` → bucket=`demo-bucket`, key=`path/to/file.txt`
+
+> 這些行為會直接影響你在本機/測試環境怎麼組 request：
+> - 用 `localhost` 或 `127.0.0.1` 打 API 時，多半走 **path style**。
+> - 用 `my-bucket.s3.local` 這類 host 才會走 **virtual-host style**。
+
 ### (D) bucket 名稱檢查：`is_valid_bucket_name()`
 
 `dispatch()` 在成功解析到 `bucket=Some(name)` 後，會先做 bucket 名稱合法性檢查，不合法直接回：
