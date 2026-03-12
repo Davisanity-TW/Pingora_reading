@@ -282,8 +282,12 @@ bucket 與 key 都會透過：
   - list objects：`MongoS3Store::list_objects(bucket, prefix, continuation_token, max_keys)`
 
 - tagging
+  - get tagging：`MongoS3Store::get_tags(bucket, key)`
   - put tagging：`MongoS3Store::update_tags(bucket, key, tags)`
   - delete tagging：`MongoS3Store::clear_tags(bucket, key)`
+
+- multi-delete
+  - delete objects：`MongoS3Store::delete_objects(bucket, keys)`
 
 > tagging 的存在讓 `PUT/DELETE` 在 `?tagging` 時走到完全不同的 handler；而這些 handler 會先更新/清除 tags，若更新失敗還會再去 `bucket_exists()` 區分是 NoSuchBucket 或 NoSuchKey。
 
