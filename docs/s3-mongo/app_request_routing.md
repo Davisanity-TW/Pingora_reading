@@ -209,6 +209,22 @@ bucket 與 key 都會透過：
 > - 用 `localhost` 或 `127.0.0.1` 打 API 時，多半走 **path style**。
 > - 用 `my-bucket.s3.local` 這類 host 才會走 **virtual-host style**。
 
+### Virtual-host style 的判斷坑點（容易踩）
+
+`parse_bucket_and_key()` 對 virtual-host style 的判斷偏『寬鬆』：
+
+- 只要 `host_without_port` 能 `split_once('.')`，就把 **第一段 label** 當 bucket
+- 例外只有三個：bucket 不能是空字串、不能是 `localhost`、host 不能是 IPv4 literal
+
+因此在某些測試/反向代理環境，如果你的 Host 是一般網域（例如 `example.com`），它會被視為 bucket=`example`（即使你的 path 其實是 `/real-bucket/real-key`）。
+
+實務上通常會用 `bucket.s3.local` / `bucket.s3.internal` 這種固定 pattern 才合理；如果未來要支援更嚴謹的 S3 virtual-host（或避免誤判），可以考慮：
+
+- 明確判斷 host 是否落在預期的 base domain（例如必須是 `*.s3.local`）
+- 或加入 config：允許/禁用 virtual-host style，或指定 base domain
+
+> 這個點對「前面還有 LB/Ingress 會改 Host」的部署特別重要：Host 一旦被改掉，bucket 解析可能會錯位，進而導致 auth 與 store 查詢落到錯 bucket。
+
 ### (D) bucket 名稱檢查：`is_valid_bucket_name()`
 
 `dispatch()` 在成功解析到 `bucket=Some(name)` 後，會先做 bucket 名稱合法性檢查，不合法直接回：

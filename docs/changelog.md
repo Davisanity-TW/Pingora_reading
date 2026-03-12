@@ -33,3 +33,7 @@
 
 - 2026-03-11
   - 補強 pingora-s3-mongo request flow：補上 `main.rs` 的 listener/service wiring（`HttpServer::new_app` → `Service::add_tcp/add_tls`）與 credential refresh background service，讓「listener/route 入口 → request context 建立」更完整（更新 `docs/s3-mongo/app_request_routing.md`）
+
+- 2026-03-12
+  - 補強 pingora-s3-mongo `parse_bucket_and_key()`：補充 virtual-host style 判斷可能誤判一般網域（如 `example.com`）為 bucket 的風險，以及在 LB/Ingress 會改 Host 時的注意事項（更新 `docs/s3-mongo/app_request_routing.md`）
+
