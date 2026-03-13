@@ -38,3 +38,6 @@
   - 補強 pingora-s3-mongo `parse_bucket_and_key()`：補充 virtual-host style 判斷可能誤判一般網域（如 `example.com`）為 bucket 的風險，以及在 LB/Ingress 會改 Host 時的注意事項（更新 `docs/s3-mongo/app_request_routing.md`）
   - 補齊 `MongoS3Store` API mapping：補上 `get_tags()` 與 `delete_objects()`（更新 `docs/s3-mongo/app_request_routing.md`）
 
+- 2026-03-13
+  - 補強 pingora-s3-mongo `parse_bucket_and_key()` 的 decode/split 細節：path-style 會把空字串 key 過濾成 None，以及 `/bucket/%2F` 這種 case 會在 split 後 decode 成 key="/"（更新 `docs/s3-mongo/app_request_routing.md`）
+

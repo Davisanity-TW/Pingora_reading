@@ -189,6 +189,10 @@ bucket 與 key 都會透過：
 做 percent-decoding。
 
 > 這代表路徑中 `%2F` 之類的編碼會被解出來；但注意這種 decode 可能會讓「原本以 `/` 分段的語意」變得微妙（例如 `%2F` 變成 `/`）。目前程式邏輯是：先 split bucket/key，再對 bucket_raw 與 key raw 各自 decode。
+>
+> 補充兩個容易忽略的細節（從 `parse_bucket_and_key()` 原始碼直接讀出來）：
+> - **Path style 會把空字串 key 過濾成 None**：`parts.next().map(decode).filter(|v| !v.is_empty())`。因此 `/bucket/`（最後一段為空）會被視為 `key=None`。
+> - **URL decode 在 split 後才做**：`/bucket/%2F` 會先 split 出 raw key=`%2F`，再 decode 成 key=`"/"`（此時 key 非空），所以會走 object-level handler，而不是 bucket-level。
 
 ### (E) 範例（對照 app.rs 內建測試）
 
