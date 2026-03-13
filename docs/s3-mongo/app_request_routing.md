@@ -437,6 +437,32 @@ bucket 與 key 都會透過：
 
 ---
 
+### 5.12 Request body 讀取與 `Expect: 100-continue`：`read_full_body()` / `maybe_send_continue()`
+
+`PUT Object`、`PUT ?tagging`、`POST ?delete` 這三條路徑都會讀 request body；在 `app.rs` 內統一走：
+
+- `read_full_body(http_stream).await?`
+  - 先呼叫 `maybe_send_continue()`（處理 `Expect: 100-continue`）
+  - 之後 loop 讀 `http_stream.read_request_body().await` 直到回 `None`
+  - 把所有 chunk `extend_from_slice()` 到同一個 `Vec<u8>`
+
+`maybe_send_continue()` 行為：
+
+- 若 header `Expect: 100-continue`（大小寫不敏感）
+  - 先回 `http_stream.write_continue_response().await`
+- 否則不做事
+
+幾個實務含意（從程式碼直讀）：
+
+- **沒有 streaming / 沒有 size cap**：body 會一次讀滿並存在記憶體 `Vec<u8>`；大物件上傳在這層沒有做上限保護。
+- **讀 body 失敗會變成 `InternalError(500)`**：
+  - 因為 `read_full_body()` 用 `?` 往上丟 `Err(String)`
+  - 最終會被 `ServeHttp::response()` 外層兜底包成 `500 InternalError`（S3 XML）。
+
+（對照原始碼：`pingora-s3-mongo/src/app.rs::read_full_body()` / `maybe_send_continue()`）
+
+---
+
 ## 5.x) 主要 error path / HTTP status mapping（從 app.rs 直接整理）
 
 > 目的：用「看到某個 status 或 S3 Code」就能快速回推是哪個分支打出來的。
