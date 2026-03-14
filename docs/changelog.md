@@ -42,3 +42,7 @@
   - 補強 pingora-s3-mongo `parse_bucket_and_key()` 的 decode/split 細節：path-style 會把空字串 key 過濾成 None，以及 `/bucket/%2F` 這種 case 會在 split 後 decode 成 key="/"（更新 `docs/s3-mongo/app_request_routing.md`）
   - 補齊 pingora-s3-mongo `app.rs` request flow：整理 `read_full_body()` / `maybe_send_continue()`（`Expect: 100-continue`）行為，以及「讀 body 失敗 → `InternalError(500)`」的錯誤傳播路徑（更新 `docs/s3-mongo/app_request_routing.md`）
 
+
+- 2026-03-14
+  - 補強 pingora-s3-mongo `app.rs` routing 筆記：補上 virtual-host style 寬鬆判斷的排除條件（localhost/IPv4）與「host 第一段 label 變動會直接改 bucket」的實務提醒（更新 `docs/s3-mongo/app_request_routing.md`）
+  - 新增 handler → `MongoS3Store` API 對應速查表（bucket/object/tagging/multi-delete），方便從 S3 API 直接定位 store 呼叫（更新 `docs/s3-mongo/app_request_routing.md`）

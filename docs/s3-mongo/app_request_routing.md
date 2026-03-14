@@ -218,6 +218,13 @@ bucket 與 key 都會透過：
 `parse_bucket_and_key()` 對 virtual-host style 的判斷偏『寬鬆』：
 
 - 只要 `host_without_port` 能 `split_once('.')`，就把 **第一段 label** 當 bucket
+- 這一步**不會**在這裡做 bucket 名稱合法性檢查（合法性是在 `dispatch()` 內 `is_valid_bucket_name()` 才檢查）
+- 只做少數排除：
+  - bucket 不能是空字串
+  - bucket 不能是 `localhost`
+  - host 不能是 IPv4 literal（例如 `127.0.0.1`），否則強制走 path style
+
+> 實務上，如果你用 `bucket.s3.local` / `bucket.example.com` 做 virtual-host style 測試，要留意 DNS/hosts 解析與反向代理的 host header 是否被改寫；只要 host 的第一段 label 變了，bucket 就會跟著變。
 - 例外只有三個：bucket 不能是空字串、不能是 `localhost`、host 不能是 IPv4 literal
 
 因此在某些測試/反向代理環境，如果你的 Host 是一般網域（例如 `example.com`），它會被視為 bucket=`example`（即使你的 path 其實是 `/real-bucket/real-key`）。
@@ -593,3 +600,53 @@ bucket 與 key 都會透過：
 - `query_has_key("x=1", "tagging") == false`
 
 > 這代表 routing 只在乎 `?tagging` / `?delete` / `?prefix` 等 key 是否出現，不在乎 value 是什麼；對 debug 很實用（例如 client 傳 `tagging=` 仍會被視為 tagging 路徑）。
+
+---
+
+## 8) handler → `MongoS3Store` API 對應（速查）
+
+從 `app.rs` 這層看，`S3MongoApp` 幾乎只負責：
+
+- routing（method/query/bucket/key）
+- 讀取 request body（PUT object / tagging / multi-delete）
+- 把「S3 API 的語意」轉成對 store 的呼叫
+
+下面整理幾個最常用的對應（只列本篇範圍內，細節請搭配 `docs/s3-mongo/store.md`）：
+
+### Bucket 層級
+
+- `GET /`（bucket=None）
+  - `list_buckets()` → `store.list_bucket_names()`（再用 `allowed_buckets` filter）
+- `PUT /{bucket}`
+  - `create_bucket()` → `store.bucket_exists()` → `store.create_bucket()`
+- `HEAD /{bucket}`
+  - `head_bucket()` → `store.bucket_exists()`
+- `DELETE /{bucket}`
+  - `delete_bucket()` → `store.bucket_exists()` → `store.bucket_object_count()` → `store.drop_bucket()`
+
+### Object 層級
+
+- `GET /{bucket}/{key}`
+  - `get_object()` → `store.get_object()`（找不到再用 `store.bucket_exists()` 決定回 NoSuchBucket/NoSuchKey）
+- `HEAD /{bucket}/{key}`
+  - `head_object()` → `store.get_object_metadata()`
+- `PUT /{bucket}/{key}`
+  - `put_object()` → `read_full_body()` + 取 `content-type` + `x-amz-tagging`（querystring format）
+  - → `store.put_object(bucket, key, body, content_type, tags)`
+- `DELETE /{bucket}/{key}`
+  - `delete_object()` → `store.delete_object()`（若刪不到再用 `store.bucket_exists()` 判斷是否 NoSuchBucket）
+
+### List / Tagging / Multi-delete（query 影響 routing）
+
+- `GET /{bucket}?prefix=...&continuation-token=...&max-keys=...`
+  - `list_objects()` → `store.list_objects(bucket, prefix, continuation, max_keys)`
+- `GET /{bucket}/{key}?tagging`
+  - `get_object_tagging()` → `store.get_tags()`（找不到再用 `store.bucket_exists()` 判斷 NoSuchBucket/NoSuchKey）
+- `PUT /{bucket}/{key}?tagging`
+  - `handle_put_tagging()` → `read_full_body()` + XML decode → `store.update_tags()`
+- `DELETE /{bucket}/{key}?tagging`
+  - `handle_delete_tagging()` → `store.clear_tags()`
+- `POST /{bucket}?delete`（multi-delete）
+  - `handle_delete_objects()` → `read_full_body()` + XML decode → `store.delete_objects(bucket, keys)`
+
+> 小提醒：這個實作下，`?tagging` 與 `?delete` 的 routing 完全是靠 `query_has_key()` 掃 key 是否存在；client 即使送 `?tagging=`（空值）仍會進 tagging handler。
