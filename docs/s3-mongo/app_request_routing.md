@@ -94,6 +94,25 @@
 
 核心流程（簡化）：
 
+### 1.1 request flow 一頁速記（從 listener 到 store）
+
+```
+Pingora listener (main.rs)
+  -> HttpServer::new_app(S3MongoApp)
+  -> ServeHttp::response(http_stream)
+      1) AccessLogCtx::from_request()   # 先抽 log context（含 bucket 推測）
+      2) dispatch(http_stream)
+          a) parse_bucket_and_key(path, host)
+          b) is_valid_bucket_name(bucket?)  # bucket 不合法：直接 400 InvalidBucketName
+          c) authenticate_request(req, bucket?)
+          d) method/query 分流到 handler
+          e) handler 內呼叫 MongoS3Store::*（mongo）
+      3) log_access(status, size, latency)
+      4) return Response
+
+※ 任何「非預期 Err(String)」會在 response() 外層統一轉成 500 InternalError(S3 XML)
+```
+
 1. 讀取 request 基本欄位：
    - `method`：轉大寫後比對（`GET/HEAD/PUT/DELETE/POST`）
    - `path`：`req.uri.path()`
@@ -473,6 +492,24 @@ bucket 與 key 都會透過：
 ## 5.x) 主要 error path / HTTP status mapping（從 app.rs 直接整理）
 
 > 目的：用「看到某個 status 或 S3 Code」就能快速回推是哪個分支打出來的。
+
+### 速查表（先看這張）
+
+| HTTP | S3 Code | 典型觸發點（app.rs） | 備註 |
+|---:|---|---|---|
+| 400 | InvalidBucketName | `dispatch()` → `is_valid_bucket_name()` | auth 之前就擋掉 |
+| 400 | InvalidURI | `handle_*`：bucket=None 但 API 需要 bucket | HEAD/PUT/DELETE 常見 |
+| 400 | InvalidRequest | `?tagging` 但 key=None | tagging 一定要 key |
+| 400 | MalformedXML | `PUT ?tagging` / `POST ?delete` XML parse 失敗 | parse 失敗不會變 500 |
+| 403 | AccessDenied / InvalidAccessKeyId / SignatureDoesNotMatch | `authenticate()` | 全部都是 403（只有 Code 不同） |
+| 404 | NoSuchBucket | 多數 handler：`bucket_exists()` 判斷 | `GET Object`/tagging 等 |
+| 404 | NoSuchKey | `GET Object`/tagging：bucket 存在但 key 不存在 | |
+| 404 | (empty body) | `head_bucket()` / `head_object()` | **不是** S3 XML error |
+| 405 | MethodNotAllowed | `dispatch()` default 分支 / `POST` 無 `?delete` | empty body |
+| 409 | BucketAlreadyOwnedByYou | `create_bucket()` | |
+| 409 | BucketNotEmpty | `delete_bucket()` | |
+| 500 | InternalError | `ServeHttp::response()` 外層兜底 | 任何 `Err(String)` |
+
 
 ### A) `dispatch()` 前段就會擋掉的錯
 

@@ -46,3 +46,5 @@
 - 2026-03-14
   - 補強 pingora-s3-mongo `app.rs` routing 筆記：補上 virtual-host style 寬鬆判斷的排除條件（localhost/IPv4）與「host 第一段 label 變動會直接改 bucket」的實務提醒（更新 `docs/s3-mongo/app_request_routing.md`）
   - 新增 handler → `MongoS3Store` API 對應速查表（bucket/object/tagging/multi-delete），方便從 S3 API 直接定位 store 呼叫（更新 `docs/s3-mongo/app_request_routing.md`）
+  - 補上一頁式 request flow 速記（listener → `ServeHttp::response()` → `dispatch()` → store）與 `dispatch()` 兜底 `InternalError(500)` 的定位提示（更新 `docs/s3-mongo/app_request_routing.md`）
+  - 新增「HTTP status / S3 Code」速查表，方便從回應快速回推 app.rs 分支（更新 `docs/s3-mongo/app_request_routing.md`）
