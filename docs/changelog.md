@@ -1,7 +1,7 @@
 # 更新日誌
 
 - 2026-03-15
-  - 補強 pingora-s3-mongo `parse_bucket_and_key()`：新增「演算法精簡版」與 vhost/path style 的關鍵邏輯/邊界行為速記，方便快速 debug（更新 `docs/s3-mongo/app_request_routing.md`）
+  - 補強 pingora-s3-mongo `app.rs` request flow：補上「錯誤回應是否帶 XML」的判斷要點（`s3_error()` vs `empty_response()` / `method_not_allowed()`），以及 `Content-Length` 一律由 `build_response()` 塞入的格式細節（更新 `docs/s3-mongo/app_request_routing.md`）
 
 - 2026-03-03
   - 初始化 VitePress 架構與 sidebar（先聚焦 pingora-s3-mongo）

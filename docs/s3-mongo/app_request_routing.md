@@ -549,6 +549,11 @@ bucket 與 key 都會透過：
 | 409 | BucketNotEmpty | `delete_bucket()` | |
 | 500 | InternalError | `ServeHttp::response()` 外層兜底 | 任何 `Err(String)` |
 
+補充兩個回應格式的小細節（從 `app.rs` 直接觀察）：
+
+- `s3_error()` 產生的錯誤回應一定是 **XML body**，並用 `xml_response()` 設定 `Content-Type: application/xml`；`build_response()` 會**強制塞 `Content-Length`**（就算 body 是空的也會是 `0`）。
+- `method_not_allowed()`（405）與部分 `HEAD` error path 走的是 `empty_response()` / `build_response()`：**body 是空的**，因此跟一般 S3 的 XML error 不同，debug 時要留意「同樣是 4xx，但有沒有 XML」。
+
 
 ### A) `dispatch()` 前段就會擋掉的錯
 
