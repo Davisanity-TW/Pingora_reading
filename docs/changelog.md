@@ -1,5 +1,8 @@
 # 更新日誌
 
+- 2026-03-15
+  - 補強 pingora-s3-mongo `parse_bucket_and_key()`：新增「演算法精簡版」與 vhost/path style 的關鍵邏輯/邊界行為速記，方便快速 debug（更新 `docs/s3-mongo/app_request_routing.md`）
+
 - 2026-03-03
   - 初始化 VitePress 架構與 sidebar（先聚焦 pingora-s3-mongo）
   - 新增 pingora-s3-mongo：總覽/啟動流程/Config/Auth/Store 初稿

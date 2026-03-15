@@ -178,6 +178,45 @@ Pingora listener (main.rs)
 
 回傳 `(Option<bucket>, Option<key>)`。
 
+### 2.0 演算法精簡版（照原始碼順序）
+
+> 這段是把 `parse_bucket_and_key()` 的 if/return 依序壓縮成可讀的流程，方便你 debug bucket 解析到底是走 vhost 還是 path style。
+
+```text
+trimmed = path 去掉前導 '/'
+host_without_port = host 去掉 ':port'
+
+# 1) 先嘗試 virtual-host style（只看 host 的第一段 label）
+if host_without_port 能 split_once('.') -> bucket_label
+  且 bucket_label != ''
+  且 bucket_label != 'localhost'
+  且 host_without_port 不是 IPv4 literal
+then
+  bucket = bucket_label
+  key = (trimmed 為空 ? None : percent-decode(trimmed))
+  return
+
+# 2) 再嘗試 path style
+if trimmed != ''
+  bucket_raw, rest = trimmed splitn(2, '/')
+  bucket = percent-decode(bucket_raw)
+  key = (rest 存在 ? percent-decode(rest) : None)
+  key == '' 時視為 None
+  return
+
+# 3) 都沒有就回 (None, None)
+```
+
+#### 幾個「肉眼不容易注意」的行為
+
+- **virtual-host style 只要 host 有「一個點」就會啟用**（除非被 localhost/IPv4 排除）
+  - 例如 `example.com` 會被視為 bucket=`example`（這不一定符合你期望的 S3 行為）
+  - `a.b.c` 只取第一段 `a` 當 bucket，其餘 `b.c` 完全不參與判斷
+- **vhost style 的 bucket 不做 URL decode**：bucket 直接用 host label 字串；只有 key（path）會 decode。
+- **path style 的 bucket/key 都會 URL decode**：bucket_raw 與剩餘 key 分別 decode（先 split 再 decode）。
+
+> 如果你前面有 Ingress/LB 會改 Host header，這裡的 vhost 優先序會讓 bucket 解析「跟著 Host 走」，而不是跟 path 走；這會連帶影響 auth（SigV4 canonical request）與 store 查詢。
+
 ### (A) 優先：Virtual-host style
 
 以 `bucket.example.com` 這種格式為主：
