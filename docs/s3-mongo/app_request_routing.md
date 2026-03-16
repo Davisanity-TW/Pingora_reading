@@ -454,6 +454,12 @@ bucket 與 key 都會透過：
   - `prefix`（default ""）
   - `continuation-token`（Option）
   - `max-keys`：parse usize；<=0 視為 default；並 cap 到 `DEFAULT_MAX_KEYS=1000`
+
+補充兩個容易忽略的細節（直接對照 `app.rs` 實作）：
+
+- `query_param()` 使用 `url::form_urlencoded::parse`：會做 percent-decoding，且把 `+` 解讀為空白。
+  - 例如 `prefix=a%2Fb` 會變成 `a/b`；`prefix=a+b` 會變成 `a b`。
+- `max-keys` 只要 **缺值 / 非數字 / 解析失敗 / 解析後 <=0** 都會回退到預設 `1000`；而大於 1000 會被 clamp 到 1000。
 - store：`list_objects(bucket, prefix, continuation, max_keys)` → `ListPage`
 - bucket 不存在的判斷：
   - 只有在 `page.objects.is_empty()` 時才會再去 `bucket_exists()`
