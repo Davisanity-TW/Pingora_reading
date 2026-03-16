@@ -555,6 +555,24 @@ bucket 與 key 都會透過：
 | 409 | BucketNotEmpty | `delete_bucket()` | |
 | 500 | InternalError | `ServeHttp::response()` 外層兜底 | 任何 `Err(String)` |
 
+### `500 InternalError` 主要從哪裡來？（快速定位）
+
+在 `app.rs` 這個層級，會直接用 `?` 往上丟 `Err(String)` 的點不多，主要是兩類：
+
+1) **讀 request body 失敗**：`read_full_body(http_stream).await?`
+   - 例如 client 斷線、Pingora 讀 body 回錯等
+
+2) **store（Mongo）操作回 Err**：`self.store.*(...).await?`
+   - 包含 Mongo driver error、BSON encode/decode、查詢/更新失敗等
+
+這些錯誤最後都會被 `ServeHttp::response()` 的兜底邏輯統一轉成：
+
+- `500 InternalServerError`
+- S3 Code：`InternalError`
+- Message：`We encountered an internal error. Please try again.`
+
+> 實務上如果看到 500，但 access log 的 `act_grp` 能判斷是 GET/PUT/DELETE，下一步通常就是回頭查對應 handler 呼叫了哪個 `MongoS3Store::*`。
+
 補充兩個回應格式的小細節（從 `app.rs` 直接觀察）：
 
 - `s3_error()` 產生的錯誤回應一定是 **XML body**，並用 `xml_response()` 設定 `Content-Type: application/xml`；`build_response()` 會**強制塞 `Content-Length`**（就算 body 是空的也會是 `0`）。

@@ -2,6 +2,7 @@
 
 - 2026-03-16
   - 補強 pingora-s3-mongo ListObjects routing 筆記：補充 `query_param()`（`form_urlencoded::parse`）會做 percent-decoding 且把 `+` 解讀成空白，以及 `max-keys` 非法值回退/上限 clamp（更新 `docs/s3-mongo/app_request_routing.md`）
+  - 補齊 `500 InternalError` 的來源定位：整理 `read_full_body()` 與 `MongoS3Store::*` 的 `?` 傳播如何被 `ServeHttp::response()` 統一包成 `InternalError(500)`（更新 `docs/s3-mongo/app_request_routing.md`）
 
 - 2026-03-15
   - 補強 pingora-s3-mongo `app.rs` request flow：補上「錯誤回應是否帶 XML」的判斷要點（`s3_error()` vs `empty_response()` / `method_not_allowed()`），以及 `Content-Length` 一律由 `build_response()` 塞入的格式細節（更新 `docs/s3-mongo/app_request_routing.md`）
