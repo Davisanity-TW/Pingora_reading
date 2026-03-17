@@ -68,6 +68,18 @@
 - bucket：再次呼叫 `parse_bucket_and_key(path, host)` 取 bucket（取不到就 `-`）
 - act_grp：用 `classify_act_grp(method, query, bucket.is_none())` 粗分 GET/PUT/DELETE 等類別（給 access log 用）
 
+### 另一個 request context：AuthContext（request-level）是怎麼建立的？
+
+除了 access log 之外，`dispatch()` 內還會建立一個「每個 request 都會用到」的 `AuthContext`：
+
+- 呼叫點：`let auth = match self.authenticate(req, bucket.as_deref()).await { ... }`
+- `S3MongoApp::authenticate()` 只是薄薄一層 wrapper，真正的驗證邏輯在 `auth::authenticate_request(req, bucket, &self.credential_cache)`。
+- 成功時回傳 `AuthContext`（目前主要用到 `allowed_buckets`），後續：
+  - `GET` bucket=None 時：`list_buckets(&auth.allowed_buckets)` 會用它做 ACL filter。
+  - 其他 handler 目前沒有再做更細粒度的 per-object 權限檢查（等於「能簽過」+「bucket 在 allowed_buckets」的粒度）。
+
+> 直覺上你可以把它想成：**dispatch() 先把 request 解析（bucket/key）+ 驗證（AuthContext），然後才開始做 method routing。**
+
 ### `dispatch()` 失敗時的最外層錯誤路徑
 
 `dispatch()` 回傳型別是 `Result<Response<Vec<u8>>, String>`。
@@ -80,6 +92,46 @@
     - Message：`We encountered an internal error. Please try again.`
 
 > 也就是說：只要 handler/store 任何地方回 `Err(String)` 冒出來，最後都會被統一包成 `InternalError(500)`；而「有意識的 S3 錯誤碼」通常都是 handler 直接 `Ok(s3_error(...))` 回來的。
+
+### 主要 error path / status mapping（能在 app.rs 看到的）
+
+這裡整理「只看 `app.rs` 就能確定」的 mapping（不含 `auth.rs` 內部更細節、也不含 Mongo driver 的 error detail）。
+
+#### A) dispatch() 前段（method routing 前）
+
+- bucket 名稱不合法 → `400 BadRequest` + `InvalidBucketName`
+  - 觸發點：`if let Some(name) = bucket.as_deref() { if !is_valid_bucket_name(name) { ... } }`
+
+- auth 失敗（`self.authenticate()`）→ 全部都回 `403 Forbidden`，但 S3 Code 不同：
+  - MissingAuthorization → `AccessDenied`
+  - InvalidAccessKeyId → `InvalidAccessKeyId`
+  - AccessDenied → `AccessDenied`
+  - SignatureDoesNotMatch → `SignatureDoesNotMatch`
+
+> 注意：這個實作目前沒有回 401；全部統一 403（符合很多 S3 相容實作的習慣）。
+
+#### B) handler 內常見錯誤
+
+- bucket 缺失（對需要 bucket 的 API）→ `400 InvalidURI`
+  - 例如 `PUT /`、`HEAD /`、`DELETE /` 等
+
+- tagging API 缺 key → `400 InvalidRequest`
+  - 例如：`PUT /bucket?tagging` 或 `GET /bucket?tagging`
+
+- XML parse 失敗（tagging / multi-delete body）→ `400 MalformedXML`
+  - 這類屬於「預期錯誤」：handler 會直接回 `Ok(s3_error(...))`，不會冒 `Err(String)`。
+
+- bucket 不存在 → 多數情境是 `404 NoSuchBucket`
+  - 例：`get_object()` / `get_object_tagging()` 在找不到 object 時會再檢查 bucket 是否存在；bucket 不在就回 NoSuchBucket。
+
+- key 不存在 → `404 NoSuchKey`
+  - 例：`get_object()` / `get_object_tagging()` 的 bucket 存在但 object 不在。
+
+- bucket 仍有物件（刪 bucket）→ `409 BucketNotEmpty`
+
+- bucket 已存在（create bucket）→ `409 BucketAlreadyOwnedByYou`
+
+- 其他沒被明確 mapping 的錯（body read 失敗 / store 回 Err / 任何 `?` 冒出來）→ 最外層包成 `500 InternalError`
 
 補充：在 `app.rs` 這個層級，多數「會變成 `Err(String)`」的來源是：
 

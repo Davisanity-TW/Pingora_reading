@@ -58,3 +58,6 @@
   - 新增 handler → `MongoS3Store` API 對應速查表（bucket/object/tagging/multi-delete），方便從 S3 API 直接定位 store 呼叫（更新 `docs/s3-mongo/app_request_routing.md`）
   - 補上一頁式 request flow 速記（listener → `ServeHttp::response()` → `dispatch()` → store）與 `dispatch()` 兜底 `InternalError(500)` 的定位提示（更新 `docs/s3-mongo/app_request_routing.md`）
   - 新增「HTTP status / S3 Code」速查表，方便從回應快速回推 app.rs 分支（更新 `docs/s3-mongo/app_request_routing.md`）
+
+- 2026-03-17
+  - 補齊 pingora-s3-mongo request flow（app.rs）：新增「AuthContext 建立與使用點」說明，並彙整可由 app.rs 直接確認的主要 error path / HTTP status + S3 Code mapping（更新 `docs/s3-mongo/app_request_routing.md`）
