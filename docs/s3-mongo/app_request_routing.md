@@ -755,3 +755,41 @@ bucket 與 key 都會透過：
   - `handle_delete_objects()` → `read_full_body()` + XML decode → `store.delete_objects(bucket, keys)`
 
 > 小提醒：這個實作下，`?tagging` 與 `?delete` 的 routing 完全是靠 `query_has_key()` 掃 key 是否存在；client 即使送 `?tagging=`（空值）仍會進 tagging handler。
+
+---
+
+## 9) Debug 用：最小可重現的 request 範例（curl/概念）
+
+> 目的：在你改 routing / bucket-key 解析後，可以用這幾條最小 request 快速驗證「走的是哪條 handler」。
+>
+> 注意：以下只示範 **routing 層**；實際打到 server 還會被 SigV4 auth 擋（403）除非你帶正確簽章。若只是要看 bucket/key 解析與早期錯誤（例如 InvalidBucketName），可以故意用不帶 Authorization 的 request 觀察行為。
+
+### 9.1 Path style（localhost/127.0.0.1 會強制走 path style）
+
+- list buckets（`bucket=None`）：
+  - `GET http://127.0.0.1:PORT/`
+- list objects（`bucket=demo`, `key=None`）：
+  - `GET http://127.0.0.1:PORT/demo?prefix=logs/`
+- get object（`bucket=demo`, `key=path/to/a.txt`）：
+  - `GET http://127.0.0.1:PORT/demo/path/to/a.txt`
+- create bucket（`PUT` + `key=None`）：
+  - `PUT http://127.0.0.1:PORT/demo`
+
+### 9.2 Virtual-host style（Host 第一段 label 會被當成 bucket）
+
+- get object（`bucket=my-bucket`，`key=logs/2026-01-01.txt`）：
+  - `GET http://IP:PORT/logs/2026-01-01.txt` + header `Host: my-bucket.s3.local`
+
+> 你只要確認反向代理/Ingress **沒有把 Host 改寫**，這種方式就能穩定測 virtual-host precedence。
+
+### 9.3 `?tagging` / `?delete` 的 routing 確認
+
+- object tagging（querystring 版 header `x-amz-tagging` 是另一條路徑；這裡是 XML body 版）：
+  - `PUT /{bucket}/{key}?tagging` → `handle_put_tagging()`
+  - `GET /{bucket}/{key}?tagging` → `get_object_tagging()`
+  - `DELETE /{bucket}/{key}?tagging` → `handle_delete_tagging()`
+
+- multi-delete：
+  - `POST /{bucket}?delete` → `handle_delete_objects()`
+
+> routing 判斷只看 query key 是否存在，所以 `?tagging=` / `?delete=` 也會進對應 handler。

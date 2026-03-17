@@ -1,5 +1,8 @@
 # 更新日誌
 
+- 2026-03-17
+  - 補上 pingora-s3-mongo routing 筆記的「最小可重現 request 範例」：用 path style / virtual-host style 與 `?tagging`/`?delete` 快速驗證 handler 分流（更新 `docs/s3-mongo/app_request_routing.md`）
+
 - 2026-03-16
   - 補強 pingora-s3-mongo ListObjects routing 筆記：補充 `query_param()`（`form_urlencoded::parse`）會做 percent-decoding 且把 `+` 解讀成空白，以及 `max-keys` 非法值回退/上限 clamp（更新 `docs/s3-mongo/app_request_routing.md`）
   - 補齊 `500 InternalError` 的來源定位：整理 `read_full_body()` 與 `MongoS3Store::*` 的 `?` 傳播如何被 `ServeHttp::response()` 統一包成 `InternalError(500)`（更新 `docs/s3-mongo/app_request_routing.md`）
