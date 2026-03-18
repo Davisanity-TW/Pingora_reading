@@ -64,3 +64,4 @@
 
 - 2026-03-18
   - 補強 pingora-s3-mongo `parse_bucket_and_key()` 筆記：新增「容易踩到的 Host/Path sanity check 範例表」，特別標出 `example.com` 可能被誤判為 bucket 的行為（更新 `docs/s3-mongo/app_request_routing.md`）
+  - 補齊 pingora-s3-mongo access log 的 act_grp 分類規則：補上 `classify_act_grp()` 的判斷優先序與注意事項（act_grp 與 dispatch routing 不完全一致）（更新 `docs/s3-mongo/app_request_routing.md`）

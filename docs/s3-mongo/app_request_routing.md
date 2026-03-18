@@ -68,6 +68,19 @@
 - bucket：再次呼叫 `parse_bucket_and_key(path, host)` 取 bucket（取不到就 `-`）
 - act_grp：用 `classify_act_grp(method, query, bucket.is_none())` 粗分 GET/PUT/DELETE 等類別（給 access log 用）
 
+#### access log 的 act_grp 分類規則（`classify_act_grp`）
+
+`classify_act_grp(method, query, is_bucket_empty)` 主要用於 access log 末段的 `act_grp` 欄位（不是 routing），規則是：
+
+- `DELETE` 或 `POST ?delete` → `DELETE`
+- `GET` + list request（`?list-type` 或 `?prefix`）→ `GET:LIST`
+- `GET` + `bucket=None`（等同 `GET /` 列 buckets）→ `GET:BUCKETS`
+- 其他 `GET` / `HEAD` → `GET`
+- `PUT` / `POST`（非 delete）→ `PUT`
+- 其餘 method → 回大寫 method
+
+> 注意：act_grp 的判斷跟 `dispatch()` 的 method routing **不完全一樣**；例如 `GET ?tagging` 在 act_grp 仍會算成 `GET`（不是另外一組），debug 時要用 query/path 交叉看。
+
 ### 另一個 request context：AuthContext（request-level）是怎麼建立的？
 
 除了 access log 之外，`dispatch()` 內還會建立一個「每個 request 都會用到」的 `AuthContext`：
