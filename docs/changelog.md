@@ -61,3 +61,6 @@
 
 - 2026-03-17
   - 補齊 pingora-s3-mongo request flow（app.rs）：新增「AuthContext 建立與使用點」說明，並彙整可由 app.rs 直接確認的主要 error path / HTTP status + S3 Code mapping（更新 `docs/s3-mongo/app_request_routing.md`）
+
+- 2026-03-18
+  - 補強 pingora-s3-mongo `parse_bucket_and_key()` 筆記：新增「容易踩到的 Host/Path sanity check 範例表」，特別標出 `example.com` 可能被誤判為 bucket 的行為（更新 `docs/s3-mongo/app_request_routing.md`）

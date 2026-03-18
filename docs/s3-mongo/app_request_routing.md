@@ -267,6 +267,15 @@ if trimmed != ''
 - **vhost style 的 bucket 不做 URL decode**：bucket 直接用 host label 字串；只有 key（path）會 decode。
 - **path style 的 bucket/key 都會 URL decode**：bucket_raw 與剩餘 key 分別 decode（先 split 再 decode）。
 
+### 2.1 快速 sanity check：幾個容易踩到的輸入/輸出
+
+| Host header | Path | 解析結果 | 走哪種 style | 備註 |
+|---|---|---|---|---|
+| `localhost:8080` | `/b/k` | bucket=`b`, key=`k` | path | `localhost` 會被排除 vhost |
+| `127.0.0.1:8080` | `/b/k` | bucket=`b`, key=`k` | path | IPv4 literal 會被排除 vhost |
+| `b.s3.local:8080` | `/k` | bucket=`b`, key=`k` | vhost | vhost 優先於 path |
+| `example.com` | `/real-bucket/real-key` | bucket=`example`, key=`real-bucket/real-key` | vhost | **可能誤判**（bucket 跟著網域第一段走） |
+
 > 如果你前面有 Ingress/LB 會改 Host header，這裡的 vhost 優先序會讓 bucket 解析「跟著 Host 走」，而不是跟 path 走；這會連帶影響 auth（SigV4 canonical request）與 store 查詢。
 
 ### (A) 優先：Virtual-host style
