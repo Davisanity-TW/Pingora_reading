@@ -97,6 +97,14 @@
 
 `dispatch()` 回傳型別是 `Result<Response<Vec<u8>>, String>`。
 
+補一個讀碼時很實用的約定：在 `app.rs` 這層，**S3 相容的『預期錯誤』通常也會被包成 `Ok(Response)`**（透過 `s3_error(...)` 產生 XML error response）。
+只有當 handler/store 以 `?` 往上丟出錯誤字串（`Err(String)`）時，才會被最外層兜底轉成 `InternalError(500)`。
+
+因此你在追 request flow 時，可以先用這個判斷：
+- 看到 `Ok(s3_error(...))`：多半是『行為定義清楚』的 S3 狀態碼（NoSuchBucket/NoSuchKey/MalformedXML...）
+- 看到 `?`（例如 `read_full_body(...).await?` / `self.store.*.await?`）：一旦失敗就會落到 `Err(String)` → `500 InternalError`
+
+
 - `Ok(resp)`：原樣回應給 client
 - `Err(err_string)`：
   - log：`error!("s3-mongo request failed: {err}")`

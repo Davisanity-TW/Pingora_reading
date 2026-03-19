@@ -68,3 +68,4 @@
 
 - 2026-03-19
   - 補強 pingora-s3-mongo `PutObject` 的 tag header 解析細節：`parse_tagging_query()` 會跳過空 key、同名 key 後寫覆蓋、value 一律存成 `Bson::String`（更新 `docs/s3-mongo/app_request_routing.md`）
+  - 補上 `dispatch()` 的回傳約定：預期 S3 錯誤多為 `Ok(Response)`（`s3_error`），只有 `Err(String)` 才會被兜底轉 `InternalError(500)`（更新 `docs/s3-mongo/app_request_routing.md`）
