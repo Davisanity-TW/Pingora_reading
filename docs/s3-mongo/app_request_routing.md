@@ -484,6 +484,11 @@ bucket 與 key 都會透過：
   - 讀 header `content-type`；缺省 `application/octet-stream`
 - tags（header 版）：
   - 若有 `x-amz-tagging: k1=v1&k2=v2` → `parse_tagging_query()` 轉 `Document`
+  - `parse_tagging_query()` 的特性（直接讀 `app.rs`）：
+    - 用 `url::form_urlencoded::parse()` 解析 `k=v` pairs
+    - **key 為空字串會被跳過**（`if !k.is_empty()`）
+    - 同名 key 會被後寫覆蓋（Mongo `Document::insert()` 行為）
+    - value 一律存成 `Bson::String`（不做型別推斷）
 - store：
   - `put_object(bucket, key, body, content_type, tags)` → 回 `etag`
 - response：
